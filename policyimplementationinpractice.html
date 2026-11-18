@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Policy Implementation in Practice</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at top, #4f46e5, #0f172a 50%, #020617);
+      --glass-bg: rgba(15, 23, 42, 0.55);
+      --glass-border: rgba(148, 163, 184, 0.35);
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.25);
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --card-width: min(420px, 90vw);
+      --card-height: 320px;
+      --transition-fast: 0.35s;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: var(--bg-gradient);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text-main);
+      overflow: hidden;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 960px;
+      padding: 24px 16px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+      animation: fadeDown 0.8s ease-out;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .title {
+      font-size: clamp(1.6rem, 3vw, 2.1rem);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .tagline {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .highlight {
+      background: linear-gradient(120deg, #38bdf8, #a855f7);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    /* Slider container */
+    .slider-wrapper {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .slider {
+      position: relative;
+      width: var(--card-width);
+      height: var(--card-height);
+      perspective: 1400px;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(40px) scale(0.97);
+      transition:
+        opacity var(--transition-fast) ease-out,
+        transform var(--transition-fast) ease-out;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) scale(1);
+    }
+
+    .slide.exit-left {
+      animation: slideOutLeft 0.5s ease forwards;
+    }
+
+    .slide.exit-right {
+      animation: slideOutRight 0.5s ease forwards;
+    }
+
+    .slide.enter-from-left {
+      animation: slideInLeft 0.5s ease forwards;
+    }
+
+    .slide.enter-from-right {
+      animation: slideInRight 0.5s ease forwards;
+    }
+
+    /* Flip card */
+    .flip-card {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.6s ease;
+      cursor: pointer;
+    }
+
+    .flip-card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+    }
+
+    .flip-card.is-flipped .flip-card-inner {
+      transform: rotateY(180deg);
+      transition: transform 0.6s ease;
+    }
+
+    .flip-face {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px 22px;
+      border-radius: 24px;
+      backdrop-filter: blur(18px) saturate(140%);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 60%)
+        ,
+        radial-gradient(circle at bottom right, rgba(168, 85, 247, 0.12), transparent 55%)
+        ,
+        var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+        0 18px 40px rgba(15, 23, 42, 0.75),
+        0 0 0 1px rgba(15, 23, 42, 0.4),
+        0 0 40px 2px rgba(56, 189, 248, 0.15);
+      backface-visibility: hidden;
+    }
+
+    .flip-face.back {
+      transform: rotateY(180deg);
+    }
+
+    .card-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .card-label span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .chip {
+      font-size: 0.7rem;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.7);
+      color: var(--text-muted);
+    }
+
+    .question {
+      font-size: 1.1rem;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+
+    .answer {
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: var(--text-main);
+    }
+
+    .answer ul {
+      padding-left: 18px;
+      margin-top: 2px;
+    }
+
+    .answer li {
+      margin-bottom: 4px;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .flip-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px dashed rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.7);
+    }
+
+    .flip-hint-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    /* Slider controls */
+    .nav-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 65%)
+        ,
+        rgba(15, 23, 42, 0.9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        border-color 0.2s ease,
+        background 0.2s ease;
+      color: var(--text-main);
+    }
+
+    .nav-btn:hover {
+      transform: translateY(-1px) scale(1.03);
+      box-shadow:
+        0 10px 25px rgba(15, 23, 42, 0.8),
+        0 0 0 1px rgba(56, 189, 248, 0.35);
+      border-color: rgba(56, 189, 248, 0.7);
+    }
+
+    .nav-btn:active {
+      transform: translateY(0) scale(0.97);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.9);
+    }
+
+    .nav-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .slider-meta {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      animation: fadeUp 0.7s ease-out;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.5);
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.7);
+      transition:
+        background 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .dot.active {
+      background: var(--accent);
+      transform: scale(1.7);
+      box-shadow:
+        0 0 12px rgba(56, 189, 248, 0.8),
+        0 0 0 1px rgba(15, 23, 42, 0.9);
+    }
+
+    .kbd {
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.8);
+      font-size: 0.7rem;
+      margin: 0 2px;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 16px;
+      }
+
+      .slider-wrapper {
+        gap: 14px;
+      }
+
+      .nav-btn {
+        width: 38px;
+        height: 38px;
+      }
+
+      .flip-face {
+        padding: 18px 16px;
+      }
+    }
+
+    /* Animations */
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 0.9;
+      }
+      50% {
+        transform: scale(1.5);
+        opacity: 0.3;
+      }
+    }
+
+    @keyframes slideInRight {
+      0% {
+        transform: translateX(40px) scale(0.96);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOutLeft {
+      0% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(-40px) scale(0.96);
+        opacity: 0;
+      }
+    }
+
+    @keyframes slideInLeft {
+      0% {
+        transform: translateX(-40px) scale(0.96);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOutRight {
+      0% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(40px) scale(0.96);
+        opacity: 0;
+      }
+    }
+
+    @keyframes fadeUp {
+      0% {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-12px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="subtitle">Interactive Recap</div>
+      <h1 class="title">
+        Flipcards: <span class="highlight">Policy Implementation in Practice</span>
+      </h1>
+      <p class="tagline">
+        Tap a card to flip, use arrows to slide through 6 questions.</p>
+    </header>
+
+    <div class="slider-wrapper">
+      <!-- Previous button -->
+      <button class="nav-btn" id="prevBtn" aria-label="Previous question">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+
+      <!-- Slider -->
+      <div class="slider" id="slider">
+        <!-- Slide 1 -->
+        <div class="slide active">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-face front">
+                <div>
+                  <div class="card-label">
+                    <span>Q1</span>
+                    <span class="chip">Tap to see answer</span>
+                  </div>
+                  <div class="question">
+                    What is the difference between policy intention and implementation in practice?</div>
+                </div>
+                <div class="card-footer">
+                  <div class="flip-hint">
+                    <span class="flip-hint-dot"></span> Tap or press <span class="kbd">Space</span> to flip
+                  </div>
+                  <span>Front · Question</span>
+                </div>
+              </div>
+              <div class="flip-face back">
+                <div>
+                  <div class="card-label">
+                    <span>Answer</span>
+                  </div>
+                  <div class="answer">
+                    <ul>
+                      <li><strong>Intention = what the policy aims or promises to achieve.<br>Implementation = what institutions actually deliver and learners experience.</strong></li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span>Back · Explanation</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 2 -->
+        <div class="slide">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-face front">
+                <div>
+                  <div class="card-label">
+                    <span>Q2</span>
+                    <span class="chip">Slide 2</span>
+                  </div>
+                  <div class="question">
+                    A policy promises inclusive education. What might an implementation gap look like?
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <div class="flip-hint">
+                    <span class="flip-hint-dot"></span> Try listing them, then flip to check
+                  </div>
+                  <span>Front · Question</span>
+                </div>
+              </div>
+              <div class="flip-face back">
+                <div>
+                  <div class="card-label">
+                    <span>Answer</span>
+                    <span class="chip">Recap</span>
+                  </div>
+                  <div class="answer">
+                    The three goals were to:
+                    <ul>
+                      <li><strong>Examples: inaccessible classrooms, no adapted learning materials, or learners excluded from activities. Check the actual school context.
+</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span>Back · Explanation</span>
+                  <span>Theme: Purpose</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 3 -->
+        <div class="slide">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-face front">
+                <div>
+                  <div class="card-label">
+                    <span>Q3</span>
+                    <span class="chip">Slide 3</span>
+                  </div>
+                  <div class="question">
+                    Name two types of evidence that can help verify an implementation gap.
+
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <div class="flip-hint">
+                    <span class="flip-hint-dot"></span>
+                  </div>
+                  <span>Front · Question</span>
+                </div>
+              </div>
+              <div class="flip-face back">
+                <div>
+                  <div class="card-label">
+                  </div>
+                  <div class="answer">
+                    <ul>
+                      <li>Examples: enrolment/attendance records, budgets, classroom observations, school plans, interviews with learners, parents and teachers.
+</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span>Back · Explanation</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 4 -->
+        <div class="slide">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-face front">
+                <div>
+                  <div class="card-label">
+                    <span>Q4</span>
+                    <span class="chip">Slide 4</span>
+                  </div>
+                  <div class="question"> How can limited institutional capacity create an implementation gap?
+
+                   </div>
+                </div>
+                <div class="card-footer">
+                  <div class="flip-hint">
+            
+                  </div>
+                  <span>Front · Question</span>
+                </div>
+              </div>
+              <div class="flip-face back">
+                <div>
+                  <div class="card-label">
+
+                  </div>
+                  <div class="answer">
+        
+                    <ul>
+                      <li>A shortage of trained staff, unclear responsibilities or weak technical skills can prevent plans from becoming services.</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span>Back · Explanation</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 5 -->
+        <div class="slide">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-face front">
+                <div>
+                  <div class="card-label">
+                    <span>Q5</span>
+                    <span class="chip">Slide 5</span>
+                  </div>
+                  <div class="question">
+                    How can delayed funding or inadequate materials affect implementation?
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <div class="flip-hint">
+                  </div>
+                  <span>Front · Question</span>
+                </div>
+              </div>
+              <div class="flip-face back">
+                <div>
+                  <div class="card-label">
+                  </div>
+                  <div class="answer">
+                    <ul>
+                      <li>A shortage of trained staff, unclear responsibilities or weak technical skills can prevent plans from becoming services.</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span>Back · Explanation</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 6 -->
+        <div class="slide">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-face front">
+                <div>
+                  <div class="card-label">
+                    <span>Q6</span>
+                    <span class="chip">Slide 6</span>
+                  </div>
+                  <div class="question">
+                    Why are coordination and stakeholder participation important?
+
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <div class="flip-hint">
+                    <span class="flip-hint-dot"></span>
+                  </div>
+                  <span>Front · Question</span>
+                </div>
+              </div>
+              <div class="flip-face back">
+                <div>
+                  <div class="card-label">
+                
+                  </div>
+                  <div class="answer">
+                    <ul>
+                      <li><strong>Coordination clarifies who does what and when. Stakeholders identify local needs, contribute solutions and strengthen accountability.</strong></li>
+                    
+                    </ul>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span>Back · Explanation</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+             
+
+      </div>
+
+      <!-- Next button -->
+      <button class="nav-btn" id="nextBtn" aria-label="Next question">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="slider-meta">
+      <div id="counterText">Question 1 of 10</div>
+      <div class="dots" id="dots"></div>
+      <div>
+        Use <span class="kbd">←</span><span class="kbd">→</span> to change cards &nbsp;·&nbsp;
+        <span class="kbd">Space</span> to flip the current card.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const dotsContainer = document.getElementById("dots");
+    const counterText = document.getElementById("counterText");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const slider = document.getElementById("slider");
+
+    let currentIndex = 0;
+    let isAnimating = false;
+
+    // Create dots for each slide
+    slides.forEach((_, idx) => {
+      const dot = document.createElement("div");
+      dot.className = "dot" + (idx === 0 ? " active" : "");
+      dot.dataset.index = idx;
+      dot.addEventListener("click", () => goToSlide(idx, idx > currentIndex ? "right" : "left"));
+      dotsContainer.appendChild(dot);
+    });
+
+    function updateCounter() {
+      counterText.textContent = `Question ${currentIndex + 1} of ${slides.length}`;
+      [...dotsContainer.children].forEach((dot, idx) => {
+        dot.classList.toggle("active", idx === currentIndex);
+      });
+    }
+
+    function resetFlipOnSlide(index) {
+      const flipCard = slides[index].querySelector(".flip-card");
+      if (flipCard) {
+        flipCard.classList.remove("is-flipped");
+      }
+    }
+
+    function goToSlide(newIndex, direction = "right") {
+      if (isAnimating || newIndex === currentIndex || newIndex < 0 || newIndex >= slides.length) return;
+      isAnimating = true;
+
+      const currentSlide = slides[currentIndex];
+      const nextSlide = slides[newIndex];
+
+      // Prepare animations
+      currentSlide.classList.remove("active", "enter-from-left", "enter-from-right");
+      nextSlide.classList.remove("exit-left", "exit-right", "enter-from-left", "enter-from-right");
+
+      currentSlide.classList.add(direction === "right" ? "exit-left" : "exit-right");
+      nextSlide.classList.add(direction === "right" ? "enter-from-right" : "enter-from-left");
+      nextSlide.style.opacity = "1";
+      nextSlide.style.pointerEvents = "auto";
+
+      // Reset flip state on new slide
+      resetFlipOnSlide(newIndex);
+
+      // When animation ends, clean up
+      setTimeout(() => {
+        currentSlide.classList.remove("exit-left", "exit-right");
+        currentSlide.style.opacity = "0";
+        currentSlide.style.pointerEvents = "none";
+
+        nextSlide.classList.add("active");
+        nextSlide.classList.remove("enter-from-left", "enter-from-right");
+
+        currentIndex = newIndex;
+        updateCounter();
+        isAnimating = false;
+      }, 500); // match animation duration
+    }
+
+    prevBtn.addEventListener("click", () => {
+      goToSlide((currentIndex - 1 + slides.length) % slides.length, "left");
+    });
+
+    nextBtn.addEventListener("click", () => {
+      goToSlide((currentIndex + 1) % slides.length, "right");
+    });
+
+    // Flip current card
+    function flipCurrentCard() {
+      const currentSlide = slides[currentIndex];
+      const flipCard = currentSlide.querySelector(".flip-card");
+      if (flipCard) {
+        flipCard.classList.toggle("is-flipped");
+      }
+    }
+
+    // Card click = flip
+    slider.addEventListener("click", (e) => {
+      const slideElement = slides[currentIndex];
+      if (slideElement.contains(e.target)) {
+        flipCurrentCard();
+      }
+    });
+
+    // Keyboard controls
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        nextBtn.click();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prevBtn.click();
+      } else if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        flipCurrentCard();
+      }
+    });
+
+    updateCounter();
+  </script>
+</body>
+</html>
